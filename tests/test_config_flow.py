@@ -82,21 +82,28 @@ flow_module = load("necto_flowdraft.config_flow", "config_flow.py")
 
 
 class ConfigFlowTests(unittest.TestCase):
-    def test_validation_closes_session_even_when_login_fails(self):
+    def test_validation_detaches_session_even_when_login_fails(self):
         class Session:
-            closed = False
-            async def close(self):
-                self.closed = True
+            detached = False
+            cleared = False
+            def __init__(self):
+                self.cookie_jar = SimpleNamespace(clear=self.clear)
+            def clear(self):
+                self.cleared = True
+            def detach(self):
+                self.detached = True
         class RejectingClient:
             def __init__(self, session):
                 pass
             async def login(self, username, password):
                 raise client.NectoAuthError("synthetic")
         session = Session()
-        with patch.object(flow_module, "async_create_clientsession", return_value=session), patch.object(flow_module, "NectoClient", RejectingClient):
+        with patch.object(flow_module, "async_create_clientsession", return_value=session) as create, patch.object(flow_module, "NectoClient", RejectingClient):
             with self.assertRaises(client.NectoAuthError):
                 run_immediate(flow_module._validate(object(), "example", "synthetic"))
-        self.assertTrue(session.closed)
+        self.assertTrue(session.detached)
+        self.assertTrue(session.cleared)
+        self.assertIs(create.call_args.kwargs["auto_cleanup"], False)
 
     def test_rejected_login_produces_generic_error(self):
         async def reject(*args):

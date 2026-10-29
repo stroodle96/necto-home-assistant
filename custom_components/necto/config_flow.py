@@ -20,6 +20,7 @@ _SAFE_ERRORS = {
     "Login page did not provide expected CSRF or application data": "login_page_data",
     "Necto returned an unexpected login response": "login_response",
     "Necto returned an unexpected login redirect": "login_redirect",
+    "Necto login session could not be verified": "login_session_unverified",
     "Unable to retrieve Necto devices": "device_request",
     "Necto returned an unexpected response": "device_response",
 }

@@ -56,6 +56,7 @@ class NectoClient:
 
     async def login(self, email, password):
         """Provisional login; initial CSRF issuance still needs live verification."""
+        verify_session = False
         async with self._session.get(BASE + "/login", allow_redirects=False) as response:
             if response.status != 200:
                 raise NectoError("Unable to load the login page")
@@ -86,9 +87,23 @@ class NectoClient:
             if location.path == "/login":
                 raise NectoAuthError("Necto rejected the login")
             if location.path != "/devices":
-                category = {"/": "root", "/devices/": "devices_trailing_slash", "/login/": "login_trailing_slash",
-                            "/dashboard": "dashboard", "/home": "home", "/email/verify": "verify_email"}.get(location.path, "other_path")
-                raise NectoRedirectError(category)
+                verify_session = True
+        if verify_session:
+            await self._verify_login_session()
+
+    async def _verify_login_session(self):
+        """Verify an unfamiliar same-origin redirect without following it."""
+        from .model import parse_devices
+
+        try:
+            page = await self._get_device_page(1)
+            meta = page["props"]["devices"]["meta"]
+            current, last = meta["current_page"], meta["last_page"]
+            if type(current) is not int or type(last) is not int or current != 1 or not 1 <= last <= 100:
+                raise ValueError
+            parse_devices(page)
+        except (NectoError, KeyError, TypeError, ValueError, AttributeError):
+            raise NectoError("Necto login session could not be verified") from None
 
     async def get_device_page(self, page_number):
         """Get stored readings, without invoking the device refresh control."""
