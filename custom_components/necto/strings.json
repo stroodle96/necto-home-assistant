@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Necto",
+        "description": "Enter your Necto email and password. This experimental integration uses Necto's undocumented website; Google sign-in is not supported.",
+        "data": {"username": "Email", "password": "Password"}
+      },
+      "reauth_confirm": {
+        "title": "Reconnect Necto",
+        "description": "Enter your Necto password again.",
+        "data": {"password": "Password"}
+      },
+      "reconfigure": {
+        "title": "Update Necto password",
+        "description": "Enter the password for the existing Necto account.",
+        "data": {"password": "Password"}
+      }
+    },
+    "error": {"invalid_auth": "Necto rejected the login.", "cannot_connect": "Could not verify the Necto connection."},
+    "abort": {"already_configured": "This Necto account is already configured.", "reauth_successful": "Necto was reconnected.", "reconfigure_successful": "Necto was updated."}
+  }
+}
