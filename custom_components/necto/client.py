@@ -19,6 +19,17 @@ class NectoAuthError(NectoError):
     """Authentication failed or the session expired."""
 
 
+class NectoRedirectError(NectoError):
+    """Unexpected redirect, represented solely by an allowlisted category."""
+
+    CATEGORIES = frozenset({"other_origin", "same_host_http", "root", "devices_trailing_slash",
+                            "login_trailing_slash", "dashboard", "home", "verify_email", "other_path"})
+
+    def __init__(self, category):
+        super().__init__("Necto returned an unexpected login redirect")
+        self.category = category if category in self.CATEGORIES else "other_path"
+
+
 class _PageParser(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -70,11 +81,14 @@ class NectoClient:
             if response.status != 302:
                 raise NectoError("Necto returned an unexpected login response")
             if location.scheme != "https" or location.netloc != "app.getnecto.com":
-                raise NectoError("Necto returned an unexpected login redirect")
+                category = "same_host_http" if location.scheme == "http" and location.netloc == "app.getnecto.com" else "other_origin"
+                raise NectoRedirectError(category)
             if location.path == "/login":
                 raise NectoAuthError("Necto rejected the login")
             if location.path != "/devices":
-                raise NectoError("Necto returned an unexpected login redirect")
+                category = {"/": "root", "/devices/": "devices_trailing_slash", "/login/": "login_trailing_slash",
+                            "/dashboard": "dashboard", "/home": "home", "/email/verify": "verify_email"}.get(location.path, "other_path")
+                raise NectoRedirectError(category)
 
     async def get_device_page(self, page_number):
         """Get stored readings, without invoking the device refresh control."""

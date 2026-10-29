@@ -10,7 +10,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
-from .client import NectoAuthError, NectoClient, NectoError
+from .client import NectoAuthError, NectoClient, NectoError, NectoRedirectError
 from .const import DOMAIN
 from .model import fetch_devices
 
@@ -51,6 +51,8 @@ async def _validate(hass, username, password):
     except (NectoError, ClientError, asyncio.TimeoutError, ValueError) as exc:
         if isinstance(exc, NectoAuthError):
             reason = "authentication"
+        elif isinstance(exc, NectoRedirectError):
+            reason = "login_redirect_" + exc.category
         elif isinstance(exc, NectoError):
             reason = _SAFE_ERRORS.get(str(exc), "service_error")
         elif isinstance(exc, asyncio.TimeoutError):
