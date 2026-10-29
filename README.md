@@ -1,9 +1,9 @@
 # Necto Home Assistant integration — experimental
 
-This is an unverified development build. Its login, CSRF handling, session
-renewal, config flow, and entity lifecycle have not been tested against a live
-Necto account or a running Home Assistant. Do not rely on it for monitoring
-or alerts until those tests succeed. It uses the undocumented Necto website,
+This is an experimental development build. Initial setup and displayed values
+have been checked with one live Necto account and Home Assistant instance.
+Ongoing polling, session renewal and recovery still need live verification.
+Do not rely on it for monitoring or alerts until those tests succeed. It uses the undocumented Necto website,
 which may change without notice. Google sign-in is not supported.
 
 The integration is designed to expose temperature, humidity, last report,
@@ -11,13 +11,18 @@ last event, offline state, and powered-off state. It polls stored cloud data
 every ten minutes and does not call Necto's device-refresh command. Only
 Fahrenheit has been observed; temperature is withheld for other units until
 their meaning is verified. Readings can be old, so check the last-report time.
+Temperature and humidity remain available for one hour after the device's last
+report, including during a temporary polling failure or an offline/power-off
+status. They become unavailable at one hour; a missing, invalid or future
+timestamp does not count as fresh. Last-report and status entities remain
+separate diagnostics.
 
 ## Installation and experimental testing
 
 For HACS, open **HACS → Custom repositories**, add
 `https://github.com/stroodle96/necto-home-assistant` as an **Integration**,
 download Necto, and restart Home Assistant. The repository has not yet been
-validated by HACS or tested against a real Home Assistant instance.
+validated by HACS.
 
 For manual installation, copy `custom_components/necto` into Home Assistant's
 `config/custom_components/necto` directory and restart Home Assistant.
