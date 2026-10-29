@@ -63,6 +63,18 @@ class RedirectTests(unittest.TestCase):
                 self.assertNotIn("synthetic-secret", str(caught.exception))
                 self.assertEqual(len(session.calls), 3)
 
+    def test_login_verification_recovers_one_application_version_change(self):
+        login = '<div id="app" data-page="{&quot;component&quot;:&quot;Auth/Login&quot;,&quot;version&quot;:&quot;v1&quot;}"></div>'
+        html = '<div id="app" data-page="{&quot;component&quot;:&quot;Devices&quot;,&quot;version&quot;:&quot;v2&quot;,&quot;props&quot;:{&quot;devices&quot;:{&quot;data&quot;:[]}}}"></div>'
+        body = {"component": "Devices", "props": {"devices": {"data": [],
+                    "meta": {"current_page": 1, "last_page": 1}}}}
+        session = FakeSession([Response(200, text=login), Response(302, {"Location": "/other"}),
+                               Response(409, {"X-Inertia-Location": "/devices"}),
+                               Response(200, text=html), Response(200, body=body)])
+        run_immediate(client.NectoClient(session).login("sample@example.invalid", "synthetic"))
+        self.assertEqual(session.calls[-1][2]["headers"]["X-Inertia-Version"], "v2")
+        self.assertEqual(len(session.calls), 5)
+
     def test_expected_login_outcomes_remain_unchanged(self):
         login = '<div id="app" data-page="{&quot;component&quot;:&quot;Auth/Login&quot;,&quot;version&quot;:&quot;v1&quot;}"></div>'
         accepted = FakeSession([Response(200, text=login), Response(302, {"Location": "/devices"})])

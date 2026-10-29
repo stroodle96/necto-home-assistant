@@ -19,6 +19,10 @@ class NectoAuthError(NectoError):
     """Authentication failed or the session expired."""
 
 
+class _VersionChanged(NectoError):
+    """The Inertia application version changed."""
+
+
 class NectoRedirectError(NectoError):
     """Unexpected redirect, represented solely by an allowlisted category."""
 
@@ -41,6 +45,14 @@ class _PageParser(HTMLParser):
             self.page = data["data-page"]
 
 
+def release_session(session):
+    """Clear the private cookies and detach from HA's shared connector."""
+    try:
+        session.cookie_jar.clear()
+    finally:
+        session.detach()
+
+
 class NectoClient:
     """Use a caller-owned async session and its isolated cookie jar."""
 
@@ -51,8 +63,8 @@ class NectoClient:
         self._password = password
 
     async def close(self):
-        """Release the integration-owned session and its cookie jar."""
-        await self._session.close()
+        """Release the integration's private session and its cookie jar."""
+        release_session(self._session)
 
     async def login(self, email, password):
         """Provisional login; initial CSRF issuance still needs live verification."""
@@ -96,7 +108,11 @@ class NectoClient:
         from .model import parse_devices
 
         try:
-            page = await self._get_device_page(1)
+            try:
+                page = await self._get_device_page(1)
+            except _VersionChanged:
+                await self._refresh_version()
+                page = await self._get_device_page(1)
             meta = page["props"]["devices"]["meta"]
             current, last = meta["current_page"], meta["last_page"]
             if type(current) is not int or type(last) is not int or current != 1 or not 1 <= last <= 100:
@@ -107,13 +123,45 @@ class NectoClient:
 
     async def get_device_page(self, page_number):
         """Get stored readings, without invoking the device refresh control."""
+        authenticated = version_refreshed = False
+        while True:
+            try:
+                return await self._get_device_page(page_number)
+            except _VersionChanged:
+                if version_refreshed:
+                    raise NectoError("Necto application version changed repeatedly") from None
+                version_refreshed = True
+                try:
+                    await self._refresh_version()
+                except NectoAuthError:
+                    if authenticated or self._email is None or self._password is None:
+                        raise
+                    authenticated = True
+                    await self.login(self._email, self._password)
+            except NectoAuthError:
+                if authenticated or self._email is None or self._password is None:
+                    raise
+                authenticated = True
+                await self.login(self._email, self._password)
+
+    async def _refresh_version(self):
+        """Read the same device page as HTML, without following redirects."""
+        async with self._session.get(BASE + "/devices", allow_redirects=False) as response:
+            if response.status in (301, 302, 303, 401, 403, 419):
+                raise NectoAuthError("Necto session expired or was rejected")
+            if response.status != 200:
+                raise NectoError("Unable to reload Necto application data")
+            parser = _PageParser()
+            parser.feed(await response.text())
         try:
-            return await self._get_device_page(page_number)
-        except NectoAuthError:
-            if self._email is None or self._password is None:
-                raise
-            await self.login(self._email, self._password)
-            return await self._get_device_page(page_number)
+            page = json.loads(parser.page)
+            if (page["component"] == "Auth/Login" or not isinstance(page["component"], str)
+                    or not isinstance(page["props"]["devices"]["data"], list)
+                    or not isinstance(page["version"], str) or not page["version"]):
+                raise ValueError
+            self._version = page["version"]
+        except (KeyError, TypeError, ValueError):
+            raise NectoError("Necto returned unexpected application data") from None
 
     async def _get_device_page(self, page_number):
         if type(page_number) is not int or not 1 <= page_number <= 100:
@@ -123,6 +171,12 @@ class NectoClient:
             headers["X-Inertia-Version"] = self._version
         async with self._session.get(BASE + "/devices", params={"page": page_number},
                                      headers=headers, allow_redirects=False) as response:
+            if response.status == 409:
+                location = response.headers.get("X-Inertia-Location", "")
+                parsed = urlsplit(urljoin(BASE + "/devices", location))
+                if not location or parsed.scheme != "https" or parsed.netloc != "app.getnecto.com" or parsed.path != "/devices" or parsed.fragment:
+                    raise NectoError("Necto returned an unexpected application redirect")
+                raise _VersionChanged
             if response.status in (301, 302, 303, 401, 403, 419):
                 raise NectoAuthError("Necto session expired or was rejected")
             if response.status != 200:

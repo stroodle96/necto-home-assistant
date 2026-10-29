@@ -53,6 +53,16 @@ class FakeSession:
 
 
 class ClientTests(unittest.TestCase):
+    def test_dispose_clears_cookie_jar_and_detaches_session(self):
+        state = {"cleared": False, "detached": False}
+        def clear():
+            state["cleared"] = True
+        def detach():
+            state["detached"] = True
+        session = SimpleNamespace(cookie_jar=SimpleNamespace(clear=clear), detach=detach)
+        run_immediate(client_module.NectoClient(session).close())
+        self.assertEqual(state, {"cleared": True, "detached": True})
+
     def login_page(self):
         return Response(200, text='<div id="app" data-page="{&quot;component&quot;:&quot;Auth/Login&quot;,&quot;version&quot;:&quot;v1&quot;}"></div>')
 
@@ -117,3 +127,38 @@ class ClientTests(unittest.TestCase):
             run_immediate(client_module.NectoClient(session).get_device_page(1))
         self.assertTrue(caught.exception.__suppress_context__)
         self.assertNotIn("synthetic-sensitive-payload", str(caught.exception))
+
+    def test_version_change_reloads_page_and_retries_once(self):
+        body = {"props": {"devices": {"data": []}}}
+        html = '<div id="app" data-page="{&quot;component&quot;:&quot;Devices&quot;,&quot;version&quot;:&quot;v2&quot;,&quot;props&quot;:{&quot;devices&quot;:{&quot;data&quot;:[]}}}"></div>'
+        session = FakeSession([Response(409, {"X-Inertia-Location": "/devices?page=1"}),
+                               Response(200, text=html), Response(200, body=body)])
+        client = client_module.NectoClient(session)
+        client._version = "v1"
+        self.assertEqual(run_immediate(client.get_device_page(1)), body)
+        self.assertEqual(session.calls[-1][2]["headers"]["X-Inertia-Version"], "v2")
+        self.assertNotIn("X-Inertia", session.calls[1][2].get("headers", {}))
+        self.assertFalse(session.calls[1][2]["allow_redirects"])
+
+    def test_version_redirect_to_other_host_is_rejected(self):
+        session = FakeSession([Response(409, {"X-Inertia-Location": "https://elsewhere.invalid/devices"})])
+        with self.assertRaises(client_module.NectoError):
+            run_immediate(client_module.NectoClient(session).get_device_page(1))
+        self.assertEqual(len(session.calls), 1)
+
+    def test_repeated_version_change_does_not_loop(self):
+        html = '<div id="app" data-page="{&quot;component&quot;:&quot;Devices&quot;,&quot;version&quot;:&quot;v2&quot;,&quot;props&quot;:{&quot;devices&quot;:{&quot;data&quot;:[]}}}"></div>'
+        mismatch = Response(409, {"X-Inertia-Location": "/devices"})
+        session = FakeSession([mismatch, Response(200, text=html), mismatch])
+        with self.assertRaises(client_module.NectoError):
+            run_immediate(client_module.NectoClient(session).get_device_page(1))
+        self.assertEqual(len(session.calls), 3)
+
+    def test_expired_session_during_version_reload_reauthenticates(self):
+        body = {"props": {"devices": {"data": []}}}
+        session = FakeSession([Response(409, {"X-Inertia-Location": "/devices"}),
+                               Response(302, {"Location": "/login"}), self.login_page(),
+                               Response(302, {"Location": "/devices"}), Response(200, body=body)])
+        client = client_module.NectoClient(session, "example@example.invalid", "synthetic")
+        self.assertEqual(run_immediate(client.get_device_page(1)), body)
+        self.assertEqual(len(session.calls), 5)
