@@ -42,6 +42,20 @@ class TelemetryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_devices({"props": {}})
 
+    def test_nonfinite_values_and_oversized_event_are_not_exposed(self):
+        for value in (float("nan"), float("inf"), float("-inf"), 10**1000):
+            payload = {"props": {"devices": {"data": [{"device_id": "example",
+                "latest_report": {"temp_val": value, "humi_val": value, "event": "x" * 256}}]}}}
+            device = parse_devices(payload)[0]
+            self.assertIsNone(device.temperature)
+            self.assertIsNone(device.humidity)
+            self.assertIsNone(device.event)
+
+    def test_malformed_user_metadata_is_rejected(self):
+        for user in ("invalid", {"meta": "invalid"}, {"meta": []}):
+            with self.subTest(user=user), self.assertRaises(ValueError):
+                parse_devices({"props": {"user": user, "devices": {"data": []}}})
+
 
 if __name__ == "__main__":
     unittest.main()

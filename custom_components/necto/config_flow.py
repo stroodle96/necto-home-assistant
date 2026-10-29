@@ -10,7 +10,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
-from .client import NectoAuthError, NectoClient, NectoError, NectoRedirectError
+from .client import NectoAuthError, NectoClient, NectoError, NectoRedirectError, release_session
 from .const import DOMAIN
 from .model import fetch_devices
 
@@ -24,13 +24,6 @@ _SAFE_ERRORS = {
     "Unable to retrieve Necto devices": "device_request",
     "Necto returned an unexpected response": "device_response",
 }
-
-
-def release_session(session):
-    try:
-        session.cookie_jar.clear()
-    finally:
-        session.detach()
 
 
 def _schema(username=True):

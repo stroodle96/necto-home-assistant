@@ -4,6 +4,8 @@ from homeassistant.components.binary_sensor import BinarySensorDeviceClass, Bina
 
 from .entity import NectoEntity
 
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = entry.runtime_data

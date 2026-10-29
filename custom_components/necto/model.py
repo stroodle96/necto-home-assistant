@@ -1,10 +1,11 @@
 """Parse telemetry observed in Necto's device-list page.
 
-This is a research component, not a complete Home Assistant integration.
+The upstream website format is undocumented and may change.
 """
 
 from dataclasses import dataclass
 from datetime import datetime
+import math
 
 
 @dataclass(frozen=True)
@@ -21,7 +22,12 @@ class Device:
 
 
 def _number(value):
-    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    try:
+        return value if math.isfinite(value) else None
+    except OverflowError:
+        return None
 
 
 def _boolean(value):
@@ -47,15 +53,26 @@ def parse_devices(page):
         raise ValueError("Not a Necto device-list response") from exc
     if not isinstance(records, list):
         raise ValueError("Not a Necto device-list response")
-    user = props.get("user") or {}
-    unit = (user.get("meta") or {}).get("unit")
+    user = props.get("user")
+    if user is None:
+        user = {}
+    if not isinstance(user, dict):
+        raise ValueError("Malformed account metadata")
+    meta = user.get("meta")
+    if meta is None:
+        meta = {}
+    if not isinstance(meta, dict):
+        raise ValueError("Malformed account metadata")
+    unit = meta.get("unit")
     if unit not in ("f", "c"):
         unit = None
     result = []
     for record in records:
         if not isinstance(record, dict) or not record.get("device_id"):
             raise ValueError("Device is missing its identifier")
-        report = record.get("latest_report") or {}
+        report = record.get("latest_report")
+        if report is None:
+            report = {}
         if not isinstance(report, dict):
             raise ValueError("Device report is malformed")
         result.append(Device(
@@ -64,7 +81,7 @@ def parse_devices(page):
             humidity=_number(report.get("humi_val")), offline=_boolean(record.get("is_offline")),
             powered_off=_boolean(record.get("is_powered_off")),
             last_report=_timestamp(record.get("latest_report_at")),
-            event=report.get("event") if isinstance(report.get("event"), str) else None,
+            event=report.get("event") if isinstance(report.get("event"), str) and len(report["event"]) <= 255 else None,
         ))
     return result
 
@@ -72,8 +89,8 @@ def parse_devices(page):
 async def fetch_devices(client):
     """Fetch every page through an authenticated client supplied by the caller.
 
-    The transport and login are intentionally not implemented yet. Follow only
-    page numbers, never a server-provided URL, to avoid credential leakage.
+    Follow only page numbers, never a server-provided URL, to avoid credential
+    leakage.
     """
     devices = {}
     page_number = 1

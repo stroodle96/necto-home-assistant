@@ -82,7 +82,44 @@ flow_module = load("necto_flowdraft.config_flow", "config_flow.py")
 
 
 class ConfigFlowTests(unittest.TestCase):
-    def test_validation_detaches_session_even_when_login_fails(self):
+    def test_validation_logs_safe_login_failure_category(self):
+        class Session:
+            def __init__(self):
+                self.cookie_jar = SimpleNamespace(clear=lambda: None)
+            def detach(self):
+                pass
+        class BrokenClient:
+            def __init__(self, session):
+                pass
+            async def login(self, username, password):
+                raise client.NectoError("Login page did not provide expected CSRF or application data")
+        with patch.object(flow_module, "async_create_clientsession", return_value=Session()), patch.object(flow_module, "NectoClient", BrokenClient):
+            with self.assertLogs("necto_flowdraft.config_flow", level="WARNING") as logs:
+                with self.assertRaises(client.NectoError):
+                    run_immediate(flow_module._validate(object(), "sample@example.invalid", "synthetic-secret"))
+        self.assertIn("stage=login reason=login_page_data", logs.output[0])
+        self.assertNotIn("synthetic-secret", repr(logs.output))
+        self.assertNotIn("sample@example.invalid", repr(logs.output))
+
+    def test_validation_does_not_log_unknown_exception_contents(self):
+        class Session:
+            def __init__(self):
+                self.cookie_jar = SimpleNamespace(clear=lambda: None)
+            def detach(self):
+                pass
+        class BrokenClient:
+            def __init__(self, session):
+                pass
+            async def login(self, username, password):
+                raise client.NectoError("synthetic-secret")
+        with patch.object(flow_module, "async_create_clientsession", return_value=Session()), patch.object(flow_module, "NectoClient", BrokenClient):
+            with self.assertLogs("necto_flowdraft.config_flow", level="WARNING") as logs:
+                with self.assertRaises(client.NectoError):
+                    run_immediate(flow_module._validate(object(), "sample@example.invalid", "synthetic-secret"))
+        self.assertIn("stage=login reason=service_error", logs.output[0])
+        self.assertNotIn("synthetic-secret", repr(logs.output))
+
+    def test_validation_detaches_session_and_clears_cookies_when_login_fails(self):
         class Session:
             detached = False
             cleared = False
@@ -104,6 +141,24 @@ class ConfigFlowTests(unittest.TestCase):
         self.assertTrue(session.detached)
         self.assertTrue(session.cleared)
         self.assertIs(create.call_args.kwargs["auto_cleanup"], False)
+
+    def test_validation_detaches_session_on_success(self):
+        state = {"cleared": False, "detached": False}
+        class Session:
+            def __init__(self):
+                self.cookie_jar = SimpleNamespace(clear=lambda: state.update(cleared=True))
+            def detach(self):
+                state["detached"] = True
+        class Client:
+            def __init__(self, session):
+                pass
+            async def login(self, username, password):
+                pass
+        async def fetch(client):
+            return {}
+        with patch.object(flow_module, "async_create_clientsession", return_value=Session()), patch.object(flow_module, "NectoClient", Client), patch.object(flow_module, "fetch_devices", fetch):
+            run_immediate(flow_module._validate(object(), "sample@example.invalid", "synthetic"))
+        self.assertEqual(state, {"cleared": True, "detached": True})
 
     def test_rejected_login_produces_generic_error(self):
         async def reject(*args):

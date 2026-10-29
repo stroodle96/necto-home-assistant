@@ -1,10 +1,11 @@
 {
   "domain": "necto",
   "name": "Necto",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "documentation": "https://github.com/stroodle96/necto-home-assistant",
   "issue_tracker": "https://github.com/stroodle96/necto-home-assistant/issues",
   "codeowners": [],
+  "integration_type": "hub",
   "iot_class": "cloud_polling",
   "config_flow": true
 }

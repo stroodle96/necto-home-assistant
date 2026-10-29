@@ -15,7 +15,7 @@ PLATFORMS = (Platform.SENSOR, Platform.BINARY_SENSOR)
 
 async def async_setup_entry(hass, entry):
     """Authenticate with an isolated cookie jar and start polling."""
-    session = async_create_clientsession(hass, cookie_jar=CookieJar(), timeout=ClientTimeout(total=30))
+    session = async_create_clientsession(hass, auto_cleanup=False, cookie_jar=CookieJar(), timeout=ClientTimeout(total=30))
     client = NectoClient(session, entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD])
     coordinator = NectoCoordinator(hass, client)
     try:
@@ -24,13 +24,13 @@ async def async_setup_entry(hass, entry):
         entry.runtime_data = coordinator
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except NectoAuthError:
-        await session.close()
+        await client.close()
         raise ConfigEntryAuthFailed("Necto rejected the login") from None
     except (NectoError, ClientError, asyncio.TimeoutError):
-        await session.close()
+        await client.close()
         raise ConfigEntryNotReady("Cannot connect to Necto") from None
     except BaseException:
-        await session.close()
+        await client.close()
         raise
     return True
 
