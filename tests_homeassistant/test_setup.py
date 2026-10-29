@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.necto.client import NectoAuthError, NectoError
 
@@ -83,6 +84,7 @@ async def test_reauth_updates_password(hass):
 
 async def test_setup_creates_entities_from_cloud_data(hass):
     """The actual HA runtime loads entities from a synthetic device page."""
+    hass.config.units = US_CUSTOMARY_SYSTEM
     report_time = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
     payload = {"props": {"user": {"meta": {"unit": "f"}}, "devices": {
         "data": [{"device_id": "synthetic-device", "name": "Example", "is_offline": False,
@@ -136,6 +138,7 @@ async def test_setup_creates_entities_from_cloud_data(hass):
 
 async def test_fresh_measurements_expire_without_another_poll(hass):
     """A scheduled transition updates the entity even if no new data arrives."""
+    hass.config.units = US_CUSTOMARY_SYSTEM
     from custom_components.necto import sensor as component_sensor
     clock = [datetime.now(timezone.utc)]
     callbacks = []

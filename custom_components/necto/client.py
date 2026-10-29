@@ -155,7 +155,9 @@ class NectoClient:
             parser.feed(await response.text())
         try:
             page = json.loads(parser.page)
-            if (page["component"] == "Auth/Login" or not isinstance(page["component"], str)
+            if page["component"] == "Auth/Login":
+                raise NectoAuthError("Necto session expired or was rejected")
+            if (not isinstance(page["component"], str)
                     or not isinstance(page["props"]["devices"]["data"], list)
                     or not isinstance(page["version"], str) or not page["version"]):
                 raise ValueError

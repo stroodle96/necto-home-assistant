@@ -46,3 +46,20 @@ The setup approach follows Home Assistant's guidance for [testing a
 connection](https://contributors.home-assistant.io/core/quality-scale/test-before-configure/),
 [reauthentication](https://contributors.home-assistant.io/core/quality-scale/reauthentication-flow/),
 and [reconfiguration](https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/reconfiguration-flow/).
+
+## Development tests
+
+Use Python 3.13 to install the Home Assistant test dependencies and run both
+suites from the repository root:
+
+```sh
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r requirements-test.txt
+.venv/bin/python -m unittest discover -s tests
+.venv/bin/python -m pytest
+```
+
+Run the suites in separate processes: the lightweight tests install Home
+Assistant stubs, while pytest runs `tests_homeassistant` against the real
+Home Assistant runtime. All service responses are synthetic; these tests do
+not validate live Necto session renewal.

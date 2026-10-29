@@ -162,3 +162,31 @@ class ClientTests(unittest.TestCase):
         client = client_module.NectoClient(session, "example@example.invalid", "synthetic")
         self.assertEqual(run_immediate(client.get_device_page(1)), body)
         self.assertEqual(len(session.calls), 5)
+
+    def test_login_html_during_version_reload_reauthenticates(self):
+        body = {"props": {"devices": {"data": []}}}
+        session = FakeSession([Response(409, {"X-Inertia-Location": "/devices"}),
+                               self.login_page(), self.login_page(),
+                               Response(302, {"Location": "/devices"}), Response(200, body=body)])
+        client = client_module.NectoClient(session, "example@example.invalid", "synthetic")
+        self.assertEqual(run_immediate(client.get_device_page(2)), body)
+        self.assertEqual(session.calls[-1][2]["params"], {"page": 2})
+        self.assertEqual([method for method, _, _ in session.calls],
+                         ["GET", "GET", "GET", "POST", "GET"])
+
+    def test_login_html_during_version_reload_without_credentials_requires_auth(self):
+        session = FakeSession([Response(409, {"X-Inertia-Location": "/devices"}),
+                               self.login_page()])
+        with self.assertRaises(client_module.NectoAuthError):
+            run_immediate(client_module.NectoClient(session).get_device_page(1))
+        self.assertEqual(len(session.calls), 2)
+
+    def test_login_html_during_version_reload_does_not_repeat_login(self):
+        session = FakeSession([Response(401), self.login_page(),
+                               Response(302, {"Location": "/devices"}),
+                               Response(409, {"X-Inertia-Location": "/devices"}),
+                               self.login_page()])
+        client = client_module.NectoClient(session, "example@example.invalid", "synthetic")
+        with self.assertRaises(client_module.NectoAuthError):
+            run_immediate(client.get_device_page(1))
+        self.assertEqual(len(session.calls), 5)
