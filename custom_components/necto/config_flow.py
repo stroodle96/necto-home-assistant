@@ -1,6 +1,7 @@
 """Experimental user-driven sign-in for Necto."""
 
 import asyncio
+import logging
 
 from aiohttp import ClientError, ClientTimeout, CookieJar
 import voluptuous as vol
@@ -13,6 +14,23 @@ from .client import NectoAuthError, NectoClient, NectoError
 from .const import DOMAIN
 from .model import fetch_devices
 
+_LOGGER = logging.getLogger(__name__)
+_SAFE_ERRORS = {
+    "Unable to load the login page": "login_page_request",
+    "Login page did not provide expected CSRF or application data": "login_page_data",
+    "Necto returned an unexpected login response": "login_response",
+    "Necto returned an unexpected login redirect": "login_redirect",
+    "Unable to retrieve Necto devices": "device_request",
+    "Necto returned an unexpected response": "device_response",
+}
+
+
+def release_session(session):
+    try:
+        session.cookie_jar.clear()
+    finally:
+        session.detach()
+
 
 def _schema(username=True):
     fields = {vol.Required(CONF_PASSWORD): selector.TextSelector(
@@ -23,13 +41,28 @@ def _schema(username=True):
 
 
 async def _validate(hass, username, password):
-    session = async_create_clientsession(hass, cookie_jar=CookieJar(), timeout=ClientTimeout(total=30))
+    session = async_create_clientsession(hass, auto_cleanup=False, cookie_jar=CookieJar(), timeout=ClientTimeout(total=30))
+    stage = "login"
     try:
         client = NectoClient(session)
         await client.login(username, password)
+        stage = "devices"
         await fetch_devices(client)
+    except (NectoError, ClientError, asyncio.TimeoutError, ValueError) as exc:
+        if isinstance(exc, NectoAuthError):
+            reason = "authentication"
+        elif isinstance(exc, NectoError):
+            reason = _SAFE_ERRORS.get(str(exc), "service_error")
+        elif isinstance(exc, asyncio.TimeoutError):
+            reason = "timeout"
+        elif isinstance(exc, ClientError):
+            reason = "network_error"
+        else:
+            reason = "invalid_data"
+        _LOGGER.warning("Necto setup check failed: stage=%s reason=%s", stage, reason)
+        raise
     finally:
-        await session.close()
+        release_session(session)
 
 
 class NectoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
