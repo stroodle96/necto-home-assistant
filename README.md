@@ -3,8 +3,9 @@
 This is an experimental development build. Initial setup and displayed values
 have been checked with one live Necto account and Home Assistant instance.
 Ongoing polling, session renewal and recovery still need live verification.
-Do not rely on it for monitoring or alerts until those tests succeed. It uses the undocumented Necto website,
-which may change without notice. Google sign-in is not supported.
+Do not rely on it for monitoring or alerts until those tests succeed. It uses
+the undocumented Necto website, which may change without notice. Google sign-in
+is not supported.
 
 The integration is designed to expose temperature, humidity, last report,
 last event, offline state, and powered-off state. It polls stored cloud data
@@ -36,8 +37,24 @@ Home Assistant stores config-entry credentials in its local configuration;
 anyone with access to that storage or an unprotected backup may be able to read
 them. The password can be changed through the integration's reconfiguration
 flow, and Home Assistant can request reauthentication if Necto rejects it.
-Installation, configuration, and ongoing account access require the user's
-approval. No live test or installation has occurred.
+
+## Updates and prereleases
+
+HACS tracks published GitHub releases. A commit or a version change in the
+manifest alone does not publish a release. HACS checks for updates regularly;
+to check sooner, open the Necto repository in HACS and select **Update
+information** from its menu. Install an available update and restart Home
+Assistant to load it.
+
+Stable releases are shown by default. To include prereleases in update checks,
+enable the repository's HACS prerelease switch entity and turn it on. HACS
+disables these switch entities by default. See the [HACS update guide](https://www.hacs.xyz/docs/use/update/)
+and [prerelease switch documentation](https://www.hacs.xyz/docs/use/entities/switch/).
+
+Automatic release publishing has not been set up. After testing a version,
+the maintainer must publish a GitHub release whose tag matches the integration
+manifest version, and mark it as a prerelease when appropriate. Review the
+release contents before publishing.
 
 See [research notes](NECTO_RESEARCH.md) for confirmed observations and
 remaining unknowns. The local tests use synthetic credentials and responses.
